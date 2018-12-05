@@ -1,4 +1,4 @@
-# perceprion_poject
+# perception_project
 
 1. Install pyKitti
 2. Download dataset (odometry 80 gb+metadata) dor our project http://www.cvlibs.net/datasets/kitti/eval_odometry.php
