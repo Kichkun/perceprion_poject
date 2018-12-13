@@ -5,16 +5,16 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import pykitti
 
-# Change this to the directory where you store KITTI data
-basedir = '/Users/leeclement/Desktop/KITTI/odometry/dataset'
+# Change this to the directory where you store our KITTI data
+basedir = '/media/kish/f9d892c8-b4c1-46f0-95ed-56f4780088e6/dataset/dataset_sliced/' 
 
-# Specify the dataset to load
-sequence = '04'
+# Specify the dataset to load (now we have 4 sequenses with 200 binary files)
+sequence = '00'
 
 # Load the data. Optionally, specify the frame range to load.
 # dataset = pykitti.odometry(basedir, sequence)
 dataset = pykitti.odometry(basedir, sequence, frames=range(0, 20, 5))
-
+print(dataset.sequence_path)
 # dataset.calib:      Calibration data are accessible as a named tuple
 # dataset.timestamps: Timestamps are parsed into a list of timedelta objects
 # dataset.poses:      List of ground truth poses T_w_cam0
@@ -25,11 +25,12 @@ dataset = pykitti.odometry(basedir, sequence, frames=range(0, 20, 5))
 
 # Grab some data
 second_pose = dataset.poses[1]
-first_gray = next(iter(dataset.gray))
-first_cam1 = next(iter(dataset.cam1))
-first_rgb = dataset.get_rgb(0)
-first_cam2 = dataset.get_cam2(0)
-third_velo = dataset.get_velo(2)
+print(second_pose)
+#first_gray = next(iter(dataset.gray))
+#first_cam1 = next(iter(dataset.cam1))
+#first_rgb = dataset.get_rgb(0)
+#first_cam2 = dataset.get_cam2(0)
+third_velo = dataset.get_velo(0)
 
 # Display some of the data
 np.set_printoptions(precision=4, suppress=True)
@@ -41,19 +42,6 @@ print('\nRGB stereo pair baseline [m]: ' + str(dataset.calib.b_rgb))
 
 print('\nFirst timestamp: ' + str(dataset.timestamps[0]))
 print('\nSecond ground truth pose:\n' + str(second_pose))
-
-f, ax = plt.subplots(2, 2, figsize=(15, 5))
-ax[0, 0].imshow(first_gray[0], cmap='gray')
-ax[0, 0].set_title('Left Gray Image (cam0)')
-
-ax[0, 1].imshow(first_cam1, cmap='gray')
-ax[0, 1].set_title('Right Gray Image (cam1)')
-
-ax[1, 0].imshow(first_cam2)
-ax[1, 0].set_title('Left RGB Image (cam2)')
-
-ax[1, 1].imshow(first_rgb[1])
-ax[1, 1].set_title('Right RGB Image (cam3)')
 
 f2 = plt.figure()
 ax2 = f2.add_subplot(111, projection='3d')
