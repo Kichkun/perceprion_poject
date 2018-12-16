@@ -1,3 +1,5 @@
+#Trajectory from groundtruth
+
 import itertools
 import matplotlib.pyplot as plt
 import numpy as np
@@ -59,7 +61,7 @@ ax2.scatter(trajectory[:,0],
             trajectory[:,1],
             c='red')
 
-plt.show()
+plt.show() 
 
 
 
