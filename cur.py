@@ -12,11 +12,18 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import pykitti
 
+from open3d.open3d import (
+    estimate_normals, KDTreeSearchParamHybrid,
+    compute_fpfh_feature, read_point_cloud,
+    registration_ransac_based_on_feature_matching,
+    TransformationEstimationPointToPoint,
+    CorrespondenceCheckerBasedOnEdgeLength,
+    CorrespondenceCheckerBasedOnDistance, RANSACConvergenceCriteria,
+    registration_icp, TransformationEstimationPointToPlane,
+    draw_geometries, voxel_down_sample
+)
 
-from open3d.open3d import estimate_normals, KDTreeSearchParamHybrid, compute_fpfh_feature, read_point_cloud, \
-    registration_ransac_based_on_feature_matching, TransformationEstimationPointToPoint, \
-    CorrespondenceCheckerBasedOnEdgeLength, CorrespondenceCheckerBasedOnDistance, RANSACConvergenceCriteria, \
-    registration_icp, TransformationEstimationPointToPlane, draw_geometries, voxel_down_sample
+
 def calculate_global_pcd(dataset, numb, take_each_n_point, ax, centroids):
     pc_s = np.zeros((0, 3))
     # Collect point clouds
@@ -34,38 +41,47 @@ def calculate_global_pcd(dataset, numb, take_each_n_point, ax, centroids):
 
         pc_s = np.vstack((pc_s, pc))
         ax.scatter(pc[:, 0],
-                       pc[:, 2],
-                       pc[:, 1])#, '.g')'''
+                   pc[:, 2],
+                   pc[:, 1])  # , '.g')'''
         print(pc * centroids)
+
+
+def to_normal_axes(points):
+    """
+    in kitti z axis mean forward and y - up, this function swaps them
+    :param points: Nx3
+    :return: Nx3
+    """
+    res = np.empty_like(points)
+    res[:, 0] = points[:, 0]
+    res[:, 1] = points[:, 2]
+    res[:, 2] = points[:, 1]
+    return res
+
 
 def draw_point_cloud(dataset, pcs_step, take_each_n_point, ax, max_range):
     pc_s = np.zeros((0, 3))
     # Collect point clouds
-    for i in (np.arange(0,max_range ,pcs_step)):
-        curr = dataset.poses[i][:, 3]
+    for i in np.arange(0, max_range, pcs_step):
+        curr = dataset.poses[i][:3, 3]
 
         # Select n points from i-th point cloud
         pc = dataset.get_velo(i)
-        pc = pc[range(0, pc.shape[0], take_each_n_point)]
+        pc = pc[::take_each_n_point]
 
         # Transform from velodyne (X) to left camera coordinates (x): x = Tr * X
-        Tr = dataset.calib.T_cam0_velo[:3, :]
-        pc = np.array([dot(Tr, i) for i in pc])
-        pc += curr[:3]
-
+        pc = (dataset.calib.T_cam0_velo @ pc.T).T
+        pc = pc[:, :3]
+        pc += curr
+        pc = to_normal_axes(pc)
         pc_s = np.vstack((pc_s, pc))
-        '''if ((i%2)==0):
-            ax.scatter(pc[:, 0],
-                        pc[:, 2],
-                        pc[:, 1])#, '.r')
-        if ((i % 2) == 1):
-            ax.scatter(pc[:, 0],
-                       pc[:, 2],
-                       pc[:, 1])#, '.g')'''
 
-    ax.scatter(pc_s[:, 0],
-                   pc_s[:, 2],
-                   pc_s[:, 1])
+    ax.scatter(
+        pc_s[:, 0],
+        pc_s[:, 1],
+        pc_s[:, 2],
+        s=2
+    )
 
 
 def get_trajectory(dataset):
@@ -149,6 +165,7 @@ def find_best_fitting_plane(trajectory, ax):
 
     return trajectory, centroid
 
+
 def draw_registration_result(source, target, transformation):
     source_temp = copy.deepcopy(source)
     target_temp = copy.deepcopy(target)
@@ -156,6 +173,8 @@ def draw_registration_result(source, target, transformation):
     target_temp.paint_uniform_color([0, 0.651, 0.929])
     source_temp.transform(transformation)
     draw_geometries([source_temp, target_temp])
+
+
 def draw_registration_result_part(source, target, transformation):
     source_temp = copy.deepcopy(source)
     target_temp = copy.deepcopy(target)
@@ -164,6 +183,7 @@ def draw_registration_result_part(source, target, transformation):
     source_temp.transform(transformation)
     draw_geometries([source_temp])
 
+
 def preprocess_point_cloud(pcd, voxel_size):
     print(":: Downsample with a voxel size %.3f." % voxel_size)
     pcd_down = voxel_down_sample(pcd, voxel_size)
@@ -171,13 +191,14 @@ def preprocess_point_cloud(pcd, voxel_size):
     radius_normal = voxel_size * 2
     print(":: Estimate normal with search radius %.3f." % radius_normal)
     estimate_normals(pcd_down, KDTreeSearchParamHybrid(
-            radius = radius_normal, max_nn = 30))
+        radius=radius_normal, max_nn=30))
 
     radius_feature = voxel_size * 5
     print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
     pcd_fpfh = compute_fpfh_feature(pcd_down,
-            KDTreeSearchParamHybrid(radius = radius_feature, max_nn = 100))
+                                    KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
     return pcd_down, pcd_fpfh
+
 
 def prepare_dataset(voxel_size):
     print(":: Load two point clouds and disturb initial pose.")
@@ -187,12 +208,13 @@ def prepare_dataset(voxel_size):
      [-0.139, 0.967, -0.215, 0.7],
      [0.487, 0.255, 0.835, -1.4],
      [0.0, 0.0, 0.0, 1.0]])'''
-    #source.transform(trans_init)
+    # source.transform(trans_init)
     draw_registration_result(source, target, np.identity(4))
 
     source_down, source_fpfh = preprocess_point_cloud(source, voxel_size)
     target_down, target_fpfh = preprocess_point_cloud(target, voxel_size)
     return source, target, source_down, target_down, source_fpfh, target_fpfh
+
 
 def execute_global_registration(
         source_down, target_down, source_fpfh, target_fpfh, voxel_size):
@@ -201,13 +223,14 @@ def execute_global_registration(
     print("   Since the downsampling voxel size is %.3f," % voxel_size)
     print("   we use a liberal distance threshold %.3f." % distance_threshold)
     result = registration_ransac_based_on_feature_matching(
-            source_down, target_down, source_fpfh, target_fpfh,
-            distance_threshold,
-            TransformationEstimationPointToPoint(False), 4,
-            [CorrespondenceCheckerBasedOnEdgeLength(0.9),
-            CorrespondenceCheckerBasedOnDistance(distance_threshold)],
-            RANSACConvergenceCriteria(4000000, 500))
+        source_down, target_down, source_fpfh, target_fpfh,
+        distance_threshold,
+        TransformationEstimationPointToPoint(False), 4,
+        [CorrespondenceCheckerBasedOnEdgeLength(0.9),
+         CorrespondenceCheckerBasedOnDistance(distance_threshold)],
+        RANSACConvergenceCriteria(4000000, 500))
     return result
+
 
 def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
     distance_threshold = voxel_size * 0.4
@@ -215,21 +238,22 @@ def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
     print("   clouds to refine the alignment. This time we use a strict")
     print("   distance threshold %.3f." % distance_threshold)
     result = registration_icp(source, target, distance_threshold,
-            result_ransac.transformation,
-            TransformationEstimationPointToPlane())
+                              result_ransac.transformation,
+                              TransformationEstimationPointToPlane())
     return result
+
 
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)
 
     # Folder with data set
-    basedir = '/home/kish/dataset'
+    basedir = '/Users/s.tsepa/Workspace/prob-rob/proj/perception_project/dataset'
     # Sequence to use
     sequence = '00'
     # Amount of frames to download.
-    max_range = 500
+    max_range = 200
     # How frequently should we select point clouds
-    pcs_step = 10
+    pcs_step = 25
     # Get n-th points from each of point clouds
     take_each_n_point = 500
 
@@ -240,31 +264,35 @@ if __name__ == "__main__":
     f2 = plt.figure()
     ax2 = f2.add_subplot(111, projection='3d')
 
-    draw_point_cloud(dataset, pcs_step, take_each_n_point, ax2,  int(max_range/pcs_step))
+    draw_point_cloud(dataset, pcs_step, take_each_n_point, ax2, max_range)
     trajectory = get_trajectory(dataset)
-
-    trajectory, centroids = find_best_fitting_plane(trajectory, ax2)
+    trajectory = to_normal_axes(trajectory)
 
     ax2.scatter(trajectory[:, 0],
                 trajectory[:, 1],
                 trajectory[:, 2],
                 c='red')
-    calculate_global_pcd(dataset,max_range,take_each_n_point,ax2, centroids)
+
+    ax2.set_zlim(-60, 60)
+    ax2.set_ylim(-50, 50)
+    ax2.set_xlabel('x')
+    ax2.set_ylabel('y')
+    ax2.set_zlabel('z')
     plt.show()
 
     # TODO:: features
     exit()
-    voxel_size = 0.5 # means 50cm for the dataset
+    voxel_size = 0.5  # means 50cm for the dataset
     source, target, source_down, target_down, source_fpfh, target_fpfh = \
-            prepare_dataset(voxel_size)
+        prepare_dataset(voxel_size)
 
     result_ransac = execute_global_registration(source_down, target_down,
-            source_fpfh, target_fpfh, voxel_size)
+                                                source_fpfh, target_fpfh, voxel_size)
     print(result_ransac)
     draw_registration_result_part(source_down, target_down,
-            result_ransac.transformation)
+                                  result_ransac.transformation)
 
     result_icp = refine_registration(source, target,
-            source_fpfh, target_fpfh, voxel_size)
+                                     source_fpfh, target_fpfh, voxel_size)
     print(result_icp)
     draw_registration_result_part(source, target, result_icp.transformation)
