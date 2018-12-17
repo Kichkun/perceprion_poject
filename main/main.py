@@ -12,7 +12,7 @@ import pykitti
 import open3d
 
 
-def draw_point_cloud(dataset, pcs_step, take_each_n_point, ax):
+def get_point_cloud(dataset, pcs_step, take_each_n_point, ax):
     pc_s = np.zeros((0, 3))
     # Collect point clouds
     for i in np.arange(0, max_range, pcs_step):
@@ -29,9 +29,7 @@ def draw_point_cloud(dataset, pcs_step, take_each_n_point, ax):
 
         pc_s = np.vstack((pc_s, pc))
 
-    # ax.scatter(pc_s[:, 0],
-    #            pc_s[:, 2],
-    #            pc_s[:, 1])
+    return pc_s
 
 
 def get_trajectory(dataset):
@@ -113,7 +111,7 @@ def find_best_fitting_plane(trajectory, ax):
 
     ax.plot_wireframe(X, Y, Z, color='dimgray')
 
-    return trajectory
+    return trajectory, centroid, M
 
 
 np.set_printoptions(precision=4, suppress=True)
@@ -136,14 +134,25 @@ dataset = pykitti.odometry(basedir, sequence, frames=range(0, max_range, 1))
 f2 = plt.figure()
 ax2 = f2.add_subplot(111, projection='3d')
 
-# draw_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
 trajectory = get_trajectory(dataset)
 
-trajectory = find_best_fitting_plane(trajectory, ax2)
+trajectory, centroid, M = find_best_fitting_plane(trajectory, ax2)
+
+pc_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
 
 ax2.scatter(trajectory[:, 0],
             trajectory[:, 1],
             trajectory[:, 2],
             c='red')
+
+pc_s -= centroid
+
+pc_s = pc_s[:, :] * M
+
+pc_s += centroid
+
+ax2.scatter(pc_s[:, 0],
+            pc_s[:, 1],
+            pc_s[:, 2])
 
 plt.show()
