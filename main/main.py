@@ -80,7 +80,8 @@ def find_best_fitting_plane(trajectory, ax):
     rotated_trajectory = centered_trajectory[:, :] * M
     rotated_centroid = np.array(*dot(centroid,M).tolist())
 
-    trajectory = rotated_trajectory + rotated_centroid
+    trajectory = rotated_trajectory
+    trajectory += rotated_centroid
 
     # Use least squares to find best fitting plane along z coordinate
 
@@ -102,7 +103,8 @@ def find_best_fitting_plane(trajectory, ax):
     uy = 100
     num = 10
 
-    base = np.array([0, 0, 0]) + rotated_centroid
+    base = np.array([0.0, 0.0, 0.0])
+    base += rotated_centroid
     normal += rotated_centroid
 
     ax.plot([base[0], normal[0]], [base[1], normal[1]], [base[2], normal[2]])
