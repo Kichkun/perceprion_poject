@@ -78,8 +78,9 @@ def find_best_fitting_plane(trajectory, ax):
     normal = np.array(*dot(normal, M).tolist())
 
     rotated_trajectory = centered_trajectory[:, :] * M
+    rotated_centroid = np.array(*dot(centroid,M).tolist())
 
-    trajectory = rotated_trajectory + centroid
+    trajectory = rotated_trajectory + rotated_centroid
 
     # Use least squares to find best fitting plane along z coordinate
 
@@ -95,14 +96,14 @@ def find_best_fitting_plane(trajectory, ax):
     # Here: a, b and c
     plane_coeffs = solve(dot(A.T, A), dot(A.T, b))
 
-    lx = -10
-    ly = -130
-    ux = 90
-    uy = 200
+    lx = -100
+    ly = -300
+    ux = 150
+    uy = 100
     num = 10
 
-    base = np.array([0, 0, 0]) + centroid
-    normal += centroid
+    base = np.array([0, 0, 0]) + rotated_centroid
+    normal += rotated_centroid
 
     ax.plot([base[0], normal[0]], [base[1], normal[1]], [base[2], normal[2]])
 
@@ -111,7 +112,7 @@ def find_best_fitting_plane(trajectory, ax):
 
     ax.plot_wireframe(X, Y, Z, color='dimgray')
 
-    return trajectory, centroid, M
+    return trajectory, centroid, rotated_centroid, M
 
 
 np.set_printoptions(precision=4, suppress=True)
@@ -125,7 +126,7 @@ max_range = 500
 # How frequently should we select point clouds
 pcs_step = 40
 # Get n points from each of point clouds
-take_each_n_point = 200
+take_each_n_point = 700
 
 # Load odometry and point clouds
 dataset = pykitti.odometry(basedir, sequence, frames=range(0, max_range, 1))
@@ -136,7 +137,7 @@ ax2 = f2.add_subplot(111, projection='3d')
 
 trajectory = get_trajectory(dataset)
 
-trajectory, centroid, M = find_best_fitting_plane(trajectory, ax2)
+trajectory, centroid, rotated_centroid, M = find_best_fitting_plane(trajectory, ax2)
 
 pc_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
 
@@ -149,7 +150,7 @@ pc_s -= centroid
 
 pc_s = pc_s[:, :] * M
 
-pc_s += centroid
+pc_s += rotated_centroid
 
 ax2.scatter(pc_s[:, 0],
             pc_s[:, 1],
