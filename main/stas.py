@@ -33,7 +33,7 @@ def trajectory_to_odometry(trajectory):
         xs[i, 2] = new_theta
         theta = xs[i - 1, 2]
         dtheta = wrap_angle(new_theta - theta)
-        motions[i - 1, :] = [dtheta, dx ** 2 + dy ** 2, 0]
+        motions[i - 1, :] = [dtheta, np.sqrt(dx ** 2 + dy ** 2), 0]
     motions[-1] = motions[-2]
 
     return xs, motions
