@@ -1,33 +1,25 @@
-import copy
-
 import matplotlib
+from sklearn.cluster import AgglomerativeClustering
+from progress.bar import FillingCirclesBar
+#import whitebox
 
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
-
+import mpl_toolkits.mplot3d.axes3d as p3
 import numpy as np
 from numpy import dot
 from numpy.linalg import inv, norm, svd, solve
 from mpl_toolkits.mplot3d import Axes3D
 
 import pykitti
+#import open3d
+#whitebox.whitebox_tools.WhiteboxTools.
 
-from open3d.open3d import (
-    estimate_normals, KDTreeSearchParamHybrid,
-    compute_fpfh_feature, read_point_cloud,
-    registration_ransac_based_on_feature_matching,
-    TransformationEstimationPointToPoint,
-    CorrespondenceCheckerBasedOnEdgeLength,
-    CorrespondenceCheckerBasedOnDistance, RANSACConvergenceCriteria,
-    registration_icp, TransformationEstimationPointToPlane,
-    draw_geometries, voxel_down_sample
-)
-
-
-def calculate_global_pcd(dataset, numb, take_each_n_point, ax, centroids):
+def get_point_cloud(dataset, pcs_step, take_each_n_point, ax):
     pc_s = np.zeros((0, 3))
+    shape_s = np.zeros(int(max_range/pcs_step))
     # Collect point clouds
-    for i in (np.arange(0, numb, pcs_step)):
+    for i in np.arange(0, max_range, pcs_step):
         curr = dataset.poses[i][:, 3]
 
         # Select n points from i-th point cloud
@@ -40,49 +32,19 @@ def calculate_global_pcd(dataset, numb, take_each_n_point, ax, centroids):
         pc += curr[:3]
 
         pc_s = np.vstack((pc_s, pc))
-        ax.scatter(pc[:, 0],
-                   pc[:, 2],
-                   pc[:, 1])  # , '.g')'''
-        print(pc * centroids)
+        shape_s[int(i/pcs_step)] = int(pc.shape[0])
+    return pc_s, shape_s
+def get_one_point_cloud_turned(dataset, n_cloud, take_each_n_point, centroid, rotated_centroid):
+    curr = dataset.poses[n_cloud][:, 3]
+    pc = dataset.get_velo(n_cloud)
+    pc = pc[range(0, pc.shape[0], take_each_n_point)]
+    Tr = dataset.calib.T_cam0_velo[:3, :]
+    pc = np.array([dot(Tr, i) for i in pc])
+    pc += curr[:3]
+    pc -= centroid
 
-
-def to_normal_axes(points):
-    """
-    in kitti z axis mean forward and y - up, this function swaps them
-    :param points: Nx3
-    :return: Nx3
-    """
-    res = np.empty_like(points)
-    res[:, 0] = points[:, 0]
-    res[:, 1] = points[:, 2]
-    res[:, 2] = points[:, 1]
-    return res
-
-
-def draw_point_cloud(dataset, pcs_step, take_each_n_point, ax, max_range):
-    pc_s = np.zeros((0, 3))
-    # Collect point clouds
-    for i in np.arange(0, max_range, pcs_step):
-        curr = dataset.poses[i][:3, 3]
-
-        # Select n points from i-th point cloud
-        pc = dataset.get_velo(i)
-        pc = pc[::take_each_n_point]
-
-        # Transform from velodyne (X) to left camera coordinates (x): x = Tr * X
-        pc = (dataset.calib.T_cam0_velo @ pc.T).T
-        pc = pc[:, :3]
-        pc += curr
-        pc = to_normal_axes(pc)
-        pc_s = np.vstack((pc_s, pc))
-
-    ax.scatter(
-        pc_s[:, 0],
-        pc_s[:, 1],
-        pc_s[:, 2],
-        s=2
-    )
-
+    pc_turned = pc * M+rotated_centroid
+    return pc_turned
 
 def get_trajectory(dataset):
     trajectory = np.zeros((0, 3))
@@ -108,14 +70,13 @@ def calculate_rotation_matrix(a, b):
 
     return I + vx + np.matmul(vx, vx) / (1 + c)
 
-
 def find_best_fitting_plane(trajectory, ax):
     # First use SVD to find normal of plane and calculate transformation to z-oriented view
     # Center all points
     centroid = [trajectory[:, 0].sum() / trajectory.shape[0],
                 trajectory[:, 1].sum() / trajectory.shape[0],
                 trajectory[:, 2].sum() / trajectory.shape[0]]
-    print(centroid)
+
     centered_trajectory = trajectory - centroid
 
     # Apply SVD
@@ -130,8 +91,10 @@ def find_best_fitting_plane(trajectory, ax):
     normal = np.array(*dot(normal, M).tolist())
 
     rotated_trajectory = centered_trajectory[:, :] * M
+    rotated_centroid = np.array(*dot(centroid,M).tolist())
 
-    trajectory = rotated_trajectory + centroid
+    trajectory = rotated_trajectory
+    trajectory += rotated_centroid
 
     # Use least squares to find best fitting plane along z coordinate
 
@@ -147,14 +110,15 @@ def find_best_fitting_plane(trajectory, ax):
     # Here: a, b and c
     plane_coeffs = solve(dot(A.T, A), dot(A.T, b))
 
-    lx = -10
-    ly = -130
-    ux = 90
-    uy = 200
+    lx = -100
+    ly = -300
+    ux = 150
+    uy = 100
     num = 10
 
-    base = np.array([0, 0, 0]) + centroid
-    normal += centroid
+    base = np.array([0.0, 0.0, 0.0])
+    base += rotated_centroid
+    normal += rotated_centroid
 
     ax.plot([base[0], normal[0]], [base[1], normal[1]], [base[2], normal[2]])
 
@@ -163,136 +127,255 @@ def find_best_fitting_plane(trajectory, ax):
 
     ax.plot_wireframe(X, Y, Z, color='dimgray')
 
-    return trajectory, centroid
+    return trajectory, centroid, rotated_centroid, M
 
 
-def draw_registration_result(source, target, transformation):
-    source_temp = copy.deepcopy(source)
-    target_temp = copy.deepcopy(target)
-    source_temp.paint_uniform_color([1, 0.706, 0])
-    target_temp.paint_uniform_color([0, 0.651, 0.929])
-    source_temp.transform(transformation)
-    draw_geometries([source_temp, target_temp])
+np.set_printoptions(precision=4, suppress=True)
+
+# Folder with data set
+basedir = '/home/kish/dataset'
+# Sequence to use
+sequence = '00'
+# Amount of frames to download.
+max_range = 500
+# How frequently should we select point clouds
+pcs_step = 1
+# Get n points from each of point clouds
+take_each_n_point = 100
+
+# Load odometry and point clouds
+dataset = pykitti.odometry(basedir, sequence, frames=range(0, max_range, 1))
+
+# Plot this
+
+f2 = plt.figure()
+ax2 = f2.add_subplot(111, projection='3d')
+
+trajectory = get_trajectory(dataset)
+
+trajectory, centroid, rotated_centroid, M = find_best_fitting_plane(trajectory, ax2)
+
+pc_s, shape_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
+print(shape_s)
+ax2.scatter(trajectory[:, 0],
+            trajectory[:, 1],
+            trajectory[:, 2],
+            c='red')
+
+pc_s -= centroid
+
+pc_s = pc_s[:, :] * M
+
+pc_s += rotated_centroid
+'''
+ax2.scatter(pc_s[:, 0],
+            pc_s[:, 1],
+            pc_s[:, 2])
+
+plt.show()'''
+
+'''fig = plt.figure()
+ax = p3.Axes3D(fig)
+ax.view_init(7, -80)
+
+for l in np.unique(label):
+    ax.scatter(pc_s[label == l, 0], pc_s[label == l, 1], pc_s[label == l, 2],
+               color=plt.cm.jet(float(l) / np.max(label + 1)),
+               s=20, edgecolor='k')
+print(np.array(label).shape)
+print(pc_s.shape)
+plt.show()
+'''
 
 
-def draw_registration_result_part(source, target, transformation):
-    source_temp = copy.deepcopy(source)
-    target_temp = copy.deepcopy(target)
-    source_temp.paint_uniform_color([1, 0.706, 0])
-    target_temp.paint_uniform_color([0, 0.651, 0.929])
-    source_temp.transform(transformation)
-    draw_geometries([source_temp])
+def calc_metrics(pcds, labels):
+    cov = []
+    k = len(np.unique(labels))
+    #print(k)
+    means = np.zeros((k, 3))
+    r = np.zeros(k)
+    var = np.zeros((k, 3))
+    mins = np.zeros((k, 3))
+    maxes = np.zeros((k, 3))
+    for l in np.unique(labels):
+        means[l, 0] = pcds[labels == l, 0].mean()
+        means[l, 1] = pcds[labels == l, 1].mean()
+        means[l, 2] = pcds[labels == l, 2].mean()
+        var[l, 0] = pcds[labels == l, 0].var()
+        var[l, 1] = pcds[labels == l, 1].var()
+        var[l, 2] = pcds[labels == l, 2].var()
+        mins[l, 0] = pcds[labels == l, 0].min()
+        mins[l, 1] = pcds[labels == l, 1].min()
+        mins[l, 2] = pcds[labels == l, 2].min()
+        maxes[l, 0] = pcds[labels == l, 0].max()
+        maxes[l, 1] = pcds[labels == l, 1].max()
+        maxes[l, 2] = pcds[labels == l, 2].max()
+        r[l] = np.sqrt(
+            (maxes[l, 0] - mins[l, 0]) ** 2 + (maxes[l, 1] - mins[l, 1]) ** 2 + (maxes[l, 2] - mins[l, 2]) ** 2) / 2
+        a = means[l, 0:2]
+        b = pcds[labels == l].shape[0]
+        c = pcds[labels == l, 0:2]
+        z = c - np.matlib.repmat(a, b, 1)
+        cov_new = (1 / pcds[labels == l, 0:2].shape[1]) * np.dot(z, z.transpose())
+        cov.append(cov_new)
+        #print(r[l])
+    cov = np.array(cov)
+    return means, cov, var, mins, maxes, r
+
+def clustering(pc_s, pcs_step, clusters_per_pair ):
+
+    k = 0
+    #print(pc_s.shape)
+    means_s = np.zeros((clusters_per_pair*int(max_range/(pcs_step)),3))
+    r_s = np.zeros(clusters_per_pair*int(max_range/2))
+    ind_1 = 0
+    ind_2 = 0
+    i = pcs_step*2
+    for j in range(0, pcs_step):
+        ind_2 += int(shape_s[j])
+    for i in range(0, max_range, pcs_step):
+        ward = AgglomerativeClustering(clusters_per_pair, linkage='ward').fit(pc_s[ind_1:ind_2])
+        label = ward.labels_
+        means, cov, vars, mins, maxes, r = calc_metrics(pc_s[ind_1:ind_2], label)
+        #print(np.cov(pc_s[label == 1]).shape)
+        means_s[k:k+clusters_per_pair] = means
+        #print("i - pcs_step")
+        #print(i-pcs_step)
+        r_s[k:k+clusters_per_pair] = r
+        k += clusters_per_pair
+        ind_1 = ind_2
+        a = i
+        b = i+pcs_step
+        for j in range(a, b):
+            ind_2 += int(shape_s[j])
+        #print(ind_1)
+        print(ind_2)
+
+        print("k")
+        print(k)
+    #print(means_s)
+    #print(means_s.shape)
+    return means_s, r_s
+
+def correspondences(dataset, means_s, pcs_step, clusters_per_pair, take_each_n_point, trashold):
+    num_of_clusters = clusters_per_pair*int(max_range/(pcs_step))
+    print(num_of_clusters)
+    corr = []
+    progress_bar = FillingCirclesBar('Correspondences calculation', max=num_of_clusters)
+    for i in range(0,int(num_of_clusters/clusters_per_pair)):
+        for j in range(i*pcs_step, (i+1)*pcs_step):
+            pc = get_one_point_cloud_turned(dataset, j, take_each_n_point, centroid, rotated_centroid)
+            outp = 0
+            for k in range(0, pc.shape[0]):
+                pc_c = pc[k]
+                mean = means_s[i].reshape(1,-1)
+                sc = 0
+                for poi in range(0,3):
+                    if ((mean[0, poi]>=pc_c[0, poi]-trashold)and(mean[0, poi]<=pc_c[0, poi]+trashold)):
+                        sc += 1
+                if (sc==3):
+                    outp+=1
+                else:
+                    outp+=0
+                #outp.append(sc)
+            #print(j)
+            progress_bar.next()
+            if (outp>1):
+                corr.append(1)
+            else:
+                corr.append(0)
+    corr = np.array(corr)
+    progress_bar.finish()
+    return corr
+
+def correspondences_new(dataset, means_s, pcs_step, clusters_per_pair, take_each_n_point, trashold):
+    num_of_clusters = clusters_per_pair*int(max_range/(pcs_step))
+    print(num_of_clusters)
+    corr_s = np.zeros((num_of_clusters, max_range))
+    progress_bar = FillingCirclesBar('Correspondences calculation', max=num_of_clusters*max_range)
+    for i in range(0, num_of_clusters):
+        for j in range(0, max_range):
+            pc = get_one_point_cloud_turned(dataset, j, take_each_n_point, centroid, rotated_centroid)
+            outp = 0
+            for k in range(0, pc.shape[0]):
+                pc_c = pc[k]
+                mean = means_s[i].reshape(1,-1)
+                sc = 0
+                for poi in range(0,3):
+                    if ((mean[0, poi]>=pc_c[0, poi]-trashold)and(mean[0, poi]<=pc_c[0, poi]+trashold)):
+                        sc += 1
+                if (sc==3):
+                    outp+=1
+                else:
+                    outp+=0
+                #outp.append(sc)
+            #print(j)
+            if (outp>=1):
+                corr_s[i,j] = 1
+            else:
+                corr_s[i,j] = -1
+            progress_bar.next()
+    progress_bar.finish()
+    return corr_s
+def stats_corr(corr):
+    count_0 = 0
+    count_1 = 0
+    count_2 = 0
+    count_3 = 0
+    print(corr.shape)
+    for i in range(0, corr.shape[0]):
+        if (corr[i] == 0):
+            count_0 += 1
+        if (corr[i] == 1):
+            count_1 += 1
+        if (corr[i] == 2):
+            count_2 += 1
+        if (corr[i] == 3):
+            count_3 += 1
+
+    print("0: " + str(count_0))
+    print("1: " + str(count_1))
+    print("2: " + str(count_2))
+    print("3: " + str(count_3))
+def stats_corrs(corr_s):
+    count_0 = 0
+    count_1 = 0
+    count_2 = 0
+    count_3 = 0
+    print(corr_s.shape)
+    for i in range(0, corr_s.shape[0]):
+        for j in range(0, corr_s.shape[1]):
+            if (corr_s[i,j] == 0):
+                count_0 += 1
+            if (corr_s[i,j] == 1):
+                count_1 += 1
+            if (corr_s[i,j] == -1):
+                count_2 += 1
+    print("0: " + str(count_0))
+    print("1: " + str(count_1))
+    print("-1: " + str(count_2))
+def means_from_file(file, plot = True):
+    data = np.load(file)
+    means_s = data['mean']
+    if plot:
+        fig = plt.figure()
+        ax = p3.Axes3D(fig)
+        ax.view_init(7, -80)
+        ax.scatter(means_s[:, 0], means_s[:, 1], means_s[:, 2], color='r')
+        plt.show()
+    return means_s
+pcs_step_cl = 20
+clusters_per_pair = 4
+#means_s, r_s = clustering(pc_s, pcs_step_cl, clusters_per_pair)
+file = "means_corresp_new.npz"
+means_s = means_from_file(file)
+#corr_s = correspondences_new(dataset,means_s,  pcs_step_cl, clusters_per_pair, take_each_n_point, 10)
+corr_s = np.load(file)['corresp']
+#np.savez("means_corresp_new", mean=means_s, corresp=corr_s)
+print(corr_s)
+stats_corrs(corr_s)
+#ax2.scatter(means_s[:, 0], means_s[:, 1], means_s[:, 2], color='r')
+#plt.show()
+#np.savez("means_20_4_500", means = means_s)
 
 
-def preprocess_point_cloud(pcd, voxel_size):
-    print(":: Downsample with a voxel size %.3f." % voxel_size)
-    pcd_down = voxel_down_sample(pcd, voxel_size)
-
-    radius_normal = voxel_size * 2
-    print(":: Estimate normal with search radius %.3f." % radius_normal)
-    estimate_normals(pcd_down, KDTreeSearchParamHybrid(
-        radius=radius_normal, max_nn=30))
-
-    radius_feature = voxel_size * 5
-    print(":: Compute FPFH feature with search radius %.3f." % radius_feature)
-    pcd_fpfh = compute_fpfh_feature(pcd_down,
-                                    KDTreeSearchParamHybrid(radius=radius_feature, max_nn=100))
-    return pcd_down, pcd_fpfh
-
-
-def prepare_dataset(voxel_size):
-    print(":: Load two point clouds and disturb initial pose.")
-    source = read_point_cloud("000000.pcd")
-    target = read_point_cloud("000099.pcd")
-    '''trans_init = np.asarray(    [[0.862, 0.011, -0.507, 0.5],
-     [-0.139, 0.967, -0.215, 0.7],
-     [0.487, 0.255, 0.835, -1.4],
-     [0.0, 0.0, 0.0, 1.0]])'''
-    # source.transform(trans_init)
-    draw_registration_result(source, target, np.identity(4))
-
-    source_down, source_fpfh = preprocess_point_cloud(source, voxel_size)
-    target_down, target_fpfh = preprocess_point_cloud(target, voxel_size)
-    return source, target, source_down, target_down, source_fpfh, target_fpfh
-
-
-def execute_global_registration(
-        source_down, target_down, source_fpfh, target_fpfh, voxel_size):
-    distance_threshold = voxel_size * 1.5
-    print(":: RANSAC registration on downsampled point clouds.")
-    print("   Since the downsampling voxel size is %.3f," % voxel_size)
-    print("   we use a liberal distance threshold %.3f." % distance_threshold)
-    result = registration_ransac_based_on_feature_matching(
-        source_down, target_down, source_fpfh, target_fpfh,
-        distance_threshold,
-        TransformationEstimationPointToPoint(False), 4,
-        [CorrespondenceCheckerBasedOnEdgeLength(0.9),
-         CorrespondenceCheckerBasedOnDistance(distance_threshold)],
-        RANSACConvergenceCriteria(4000000, 500))
-    return result
-
-
-def refine_registration(source, target, source_fpfh, target_fpfh, voxel_size):
-    distance_threshold = voxel_size * 0.4
-    print(":: Point-to-plane ICP registration is applied on original point")
-    print("   clouds to refine the alignment. This time we use a strict")
-    print("   distance threshold %.3f." % distance_threshold)
-    result = registration_icp(source, target, distance_threshold,
-                              result_ransac.transformation,
-                              TransformationEstimationPointToPlane())
-    return result
-
-
-if __name__ == "__main__":
-    np.set_printoptions(precision=4, suppress=True)
-
-    # Folder with data set
-    basedir = '/Users/s.tsepa/Workspace/prob-rob/proj/perception_project/dataset'
-    # Sequence to use
-    sequence = '00'
-    # Amount of frames to download.
-    max_range = 200
-    # How frequently should we select point clouds
-    pcs_step = 25
-    # Get n-th points from each of point clouds
-    take_each_n_point = 500
-
-    # Load odometry and point clouds
-    dataset = pykitti.odometry(basedir, sequence, frames=range(0, max_range, 1))
-
-    # Plot this
-    f2 = plt.figure()
-    ax2 = f2.add_subplot(111, projection='3d')
-
-    draw_point_cloud(dataset, pcs_step, take_each_n_point, ax2, max_range)
-    trajectory = get_trajectory(dataset)
-    trajectory = to_normal_axes(trajectory)
-
-    ax2.scatter(trajectory[:, 0],
-                trajectory[:, 1],
-                trajectory[:, 2],
-                c='red')
-
-    ax2.set_zlim(-60, 60)
-    ax2.set_ylim(-50, 50)
-    ax2.set_xlabel('x')
-    ax2.set_ylabel('y')
-    ax2.set_zlabel('z')
-    plt.show()
-
-    # TODO:: features
-    exit()
-    voxel_size = 0.5  # means 50cm for the dataset
-    source, target, source_down, target_down, source_fpfh, target_fpfh = \
-        prepare_dataset(voxel_size)
-
-    result_ransac = execute_global_registration(source_down, target_down,
-                                                source_fpfh, target_fpfh, voxel_size)
-    print(result_ransac)
-    draw_registration_result_part(source_down, target_down,
-                                  result_ransac.transformation)
-
-    result_icp = refine_registration(source, target,
-                                     source_fpfh, target_fpfh, voxel_size)
-    print(result_icp)
-    draw_registration_result_part(source, target, result_icp.transformation)
