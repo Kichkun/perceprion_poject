@@ -133,7 +133,7 @@ def plot_trajectory(rotated_trajectory, ax):
     ax.scatter(rotated_trajectory[:, 0],
                rotated_trajectory[:, 1],
                rotated_trajectory[:, 2],
-               c='red')
+               c='red', s=10)
 
 
 def plot_plane(base, normal, rotated_centroid, plane_coeffs, ax):
@@ -161,19 +161,19 @@ def plot_point_clouds(pc_s, ax2):
 def plot_landmarks_mean(lm, ax2):
     ax2.scatter(lm[:, 0],
                 lm[:, 1],
-                lm[:, 2])
+                lm[:, 2], s=6)
 
 
-def plot_proj_landmarks_mean(p_lm, ax2):
+def plot_proj_landmarks_mean(p_lm, ax2, z_shift=0):
     ax2.scatter(p_lm[:, 0],
                 p_lm[:, 1],
-                p_lm[:, 2])
+                p_lm[:, 2] - z_shift, s=6)
 
 
-def plot_proj_noise_free_robot_path(proj_noise_free_robot_path, ax2):
+def plot_proj_noise_free_robot_path(proj_noise_free_robot_path, ax2, z_shift=0):
     ax2.scatter(proj_noise_free_robot_path[:, 0],
                 proj_noise_free_robot_path[:, 1],
-                proj_noise_free_robot_path[:, 2])
+                proj_noise_free_robot_path[:, 2] - z_shift, s=10)
 
 
 def main():
@@ -209,17 +209,26 @@ def main():
     proj_landmarks_mean = project_landmarks_mean(landmarks_mean, plane_coeffs)
     proj_noise_free_robot_path = project_noise_free_robot_path(noise_free_robot_path, plane_coeffs)
 
+    Z_SHIFT = 2
     # Plot this
     f2 = plt.figure()
     ax2 = f2.add_subplot(111, projection='3d')
 
     plot_trajectory(rotated_trajectory, ax2)
     # plot_point_clouds(rotated_pc_s, ax2)
-    plot_plane(base, normal, rotated_centroid, plane_coeffs, ax2)
-    # plot_landmarks_mean(landmarks_mean, ax2)
+    plot_landmarks_mean(landmarks_mean, ax2)
 
-    plot_proj_landmarks_mean(proj_landmarks_mean, ax2)
-    plot_proj_noise_free_robot_path(proj_noise_free_robot_path, ax2)
+    plot_proj_landmarks_mean(proj_landmarks_mean, ax2, Z_SHIFT)
+    plot_proj_noise_free_robot_path(proj_noise_free_robot_path, ax2, Z_SHIFT)
+    for k in range(0, landmarks_mean.shape[0], 5):
+        ax2.plot(
+            (landmarks_mean[k][0], proj_landmarks_mean[k][0]),
+            (landmarks_mean[k][1], proj_landmarks_mean[k][1]),
+            (landmarks_mean[k][2], proj_landmarks_mean[k][2] - Z_SHIFT),
+            color='grey',
+            alpha=0.7,
+            linestyle=':'
+        )
 
     plt.show()
 
