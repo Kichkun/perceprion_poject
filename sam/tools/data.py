@@ -19,7 +19,7 @@ def sense_landmarks(real_robot_path, real_landmarks_positions, visibility_matrix
     return noised_observations
 
 
-def load_odometry_and_observations(odometry_filename, observation_filename, alphas, take_each):
+def load_odometry_and_observations(odometry_filename, noise_free_filename, observation_filename, alphas, take_each):
     """
     :param odometry_filename:
     :param observation_filename:
@@ -52,13 +52,20 @@ def load_odometry_and_observations(odometry_filename, observation_filename, alph
     # Create observations
     noised_observations = sense_landmarks(real_robot_path, real_landmarks_positions, visibility_matrix, take_each)
 
-    noise_free_robot_path[0] = real_robot_path[0]
+    if noise_free_filename is None:
+        noise_free_robot_path[0] = real_robot_path[0]
 
-    for i in range(1, num_steps):
-        noise_free_motion_commands[i - 1] = apply_noise_to_motion(real_motion[i - 1], alphas)
-        noise_free_robot_path[i] = get_prediction(noise_free_robot_path[i - 1], noise_free_motion_commands[i - 1])
+        for i in range(1, num_steps):
+            noise_free_motion_commands[i - 1] = apply_noise_to_motion(real_motion[i - 1], alphas)
+            noise_free_robot_path[i] = get_prediction(noise_free_robot_path[i - 1], noise_free_motion_commands[i - 1])
+    else:
+        noise_free_data = np.load(noise_free_filename)
+        noise_free_robot_path = noise_free_data['noise_free_robot_path']
+        noise_free_motion_commands = noise_free_data['noise_free_motion_commands']
 
     sam_input = SAMInputData(noise_free_motion_commands, noised_observations)
     sam_debug = SAMDebugData(real_robot_path, noise_free_robot_path, real_landmarks_positions, visibility_matrix)
+
+    np.savez("noise_free", noise_free_robot_path=noise_free_robot_path, noise_free_motion_commands=noise_free_motion_commands)
 
     return num_steps, sam_input, sam_debug

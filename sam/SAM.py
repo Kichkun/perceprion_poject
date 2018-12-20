@@ -29,7 +29,7 @@ class SAM:
         self.actions = np.vstack((self.actions, u))
         self.t += 1
 
-    def update(self, z):
+    def update(self, z, build):
         for i in z:
             # Add new landmarks if any
             self.check_correspondence(i)
@@ -38,18 +38,18 @@ class SAM:
         obs_from = np.array([self.t] * z.shape[0]).reshape((z.shape[0], 1))
         self.observations = np.vstack((self.observations, np.hstack((obs_from, z))))
 
-        # Problem is here
-        A, b = self.create_A_and_b()
+        if build:
+            A, b = self.create_A_and_b()
 
-        # delta = sp_lin.spsolve(dot(A.T, A), dot(A.T, b))
+            # delta = sp_lin.spsolve(dot(A.T, A), dot(A.T, b))
 
-        L = csr_matrix(cholesky(dot(A.T, A)))
-        y = sp_lin.spsolve_triangular(L, dot(A.T, b), lower=True)
-        delta = sp_lin.spsolve_triangular(L.T, y, lower=False)
+            L = csr_matrix(cholesky(dot(A.T, A)))
+            y = sp_lin.spsolve_triangular(L, dot(A.T, b), lower=True)
+            delta = sp_lin.spsolve_triangular(L.T, y, lower=False)
 
-        self.states += delta[:3 * (self.t + 1)].reshape(self.states.shape)
-        if delta.shape[0] > 3 * (self.t + 1):
-            self.landmarks += delta[3 * (self.t + 1):].reshape(self.landmarks.shape)
+            self.states += delta[:3 * (self.t + 1)].reshape(self.states.shape)
+            if delta.shape[0] > 3 * (self.t + 1):
+                self.landmarks += delta[3 * (self.t + 1):].reshape(self.landmarks.shape)
 
     def create_A_and_b(self):
         G_block = dot(self.W0, -1 * np.identity(3))
