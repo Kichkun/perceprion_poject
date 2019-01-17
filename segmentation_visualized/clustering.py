@@ -498,15 +498,15 @@ def execute_fast_global_registration(source_down, target_down,
             open3d.FastGlobalRegistrationOption(
             maximum_correspondence_distance = distance_threshold))
 def get_one_clusters(pcd, plot = False, algoritm = "Agl", number = 0):
-    colors_arr = [[0,0,0], [0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1]]
+    colors_arr = [[0,0,0], [0,0,1],[0,1,0],[0,1,1],[1,0,0],[1,0,1],[1,1,0],[1,1,1], [2,0,0], [2,0,1], [2,0,2], [2,1,0], [2,1,1], [2,1,2], [2,2,0],[2,2,1], [2,2,2], [3,0,0], [3,0,1], [3,0,2], [3,0,3],[3,1,0], [3,1,1],[3,1,2],[3,1,3],[3,2,0],[3,2,1],[3,2,2], [3,2,3]]
     pc = np.asarray(pcd.points)
     if (algoritm=="Agl"):
         ward = AgglomerativeClustering(clusters_per_pair, linkage='ward').fit(pc)
         label = ward.labels_
     elif (algoritm == "DBSCAN"):
         #weights = calc_weights(get_one_point_cloud_turned(dataset, number, take_each_n_point, centroid, rotated_centroid),trajectory[number])
-        weights = calc_weights(np.asanyarray(pcd.points),trajectory[number])
-        db = DBSCAN(eps=1, min_samples=5).fit(pc, sample_weight= weights)
+        #weights = calc_weights(np.asanyarray(pcd.points),trajectory[number])
+        db = DBSCAN(eps=1, min_samples=5).fit(pc)#, sample_weight= weights)
         label = db.labels_
         n_clusters_ = len(set(label)) - (1 if -1 in label else 0)
         n_noise_ = list(label).count(-1)
@@ -539,6 +539,7 @@ def get_one_clusters(pcd, plot = False, algoritm = "Agl", number = 0):
                 points = np.array(pc[label == l])
                 pcd = open3d.PointCloud()
                 pcd.points = open3d.Vector3dVector(points)
+                print(colors_arr[int(l)])
                 pcd.paint_uniform_color(colors_arr[int(l)])
 
                 pcds.append(pcd)
@@ -597,7 +598,7 @@ def custom_draw_geometry(j=0, saveF = True, filter_z = 0.5):
             time.sleep(0.2)
         vis.destroy_window()
 
-def custom_draw_joint_geometry(pcds, saveF = False, number = 0):
+def custom_draw_joint_geometry(pcds, saveF = False, number = 0, j = 0):
     vis = open3d.Visualizer()
     vis.create_window()
 
@@ -620,7 +621,7 @@ def custom_draw_joint_geometry(pcds, saveF = False, number = 0):
     # TODO: Save images to files
 
     if (saveF):
-        plt.imsave("/home/kish/PycharmProjects/try/TestData/segments_DB/{:05d}.png".format(number), \
+        plt.imsave("/home/kish/PycharmProjects/try/TestData/segments_DB_new2/{:05d}.png".format(number), \
                    np.asarray(image), dpi=1)
 
     vis.run()
@@ -663,15 +664,13 @@ def full_registration(pcds,
                 pose_graph.edges.append(open3d.PoseGraphEdge(source_id, target_id,
                         transformation_icp, information_icp, uncertain = True))
     return pose_graph
-def get_joint_segments(i = 0, j = 1, algoritm = "Agl", plot = False,  filter_z = 0.5):
-    pcds = get_one_clusters(get_one_pcd_filtered(i, filter_z), algoritm=algoritm, number=i)
-    pcds1 = get_one_clusters(get_one_pcd_filtered(j, filter_z), algoritm=algoritm, number=j)
+def get_joint_segments(pcds, pcds1, plot = False,  filter_z = 0.5):
     pairs = np.zeros((len(pcds), len(pcds1)))
     pcds_joint = []
     for i in range(0, len(pcds)):
         for j in range(0, len(pcds1)):
             pairs[i, j] = str(pairwise_icp(pcds[i], pcds1[j], filter_z, draw=False))
-            if (pairs[i,j]>0.5):
+            if (pairs[i,j]>0.3):
                 # join segments +down_sample+draw
                 #TODO: add downsample, add pcds output and full render
                 pcd_joint = [pcds[i], pcds1[j]]
@@ -680,7 +679,7 @@ def get_joint_segments(i = 0, j = 1, algoritm = "Agl", plot = False,  filter_z =
                     #pcds[point_id].transform(pose_graph.nodes[point_id].pose)
                     pcd_combined += pcd_joint[point_id]
 
-                pcd_combined_down = open3d.voxel_down_sample(pcd_combined, voxel_size=voxel_size)
+                pcd_combined_down = open3d.voxel_down_sample(pcd_combined, voxel_size=0.0001)
                 # open3d.write_point_cloud("multiway_registration.pcd", pcd_combined_down)
                 #open3d.draw_geometries([pcd_combined_down])
                 #TODO: add posegraph combination
@@ -715,6 +714,49 @@ def calc_weights(new_pcd, center):
     #plt.figure()
     #plt.hist(distances)
     #plt.show()
+    #plt.figure()
+    #plt.plot(distances, range(0, distances.shape[0]), '.g')
+    #min_max_scaler = preprocessing.MinMaxScaler()
+    X = distances
+    X_std = (X - X.min(axis=0)) / (X.max(axis=0) - X.min(axis=0))
+    X_scaled = X_std * (X.max() - X.min()) + X.min()
+    distances = np.array(X_scaled/X.max())
+    #plt.plot(distances,range(0,distances.shape[0]), '.r')
+    #distances_new = distances-distances.max()
+    #distances_new = (distances_new-distances_new.min())/(-1*distances_new.min())
+    #plt.plot(distances_new, range(0, distances_new.shape[0]), '.b')
+    #plt.show()
+    return distances
+def calc_weights_new(new_pcd, center):
+    #new_pcd = get_one_point_cloud_turned(dataset,0,1,centroid, rotated_centroid)
+    r = np.array([(new_pcd[:,0].max()-new_pcd[:,0].min())/new_pcd.shape[0],(new_pcd[:,1].max()-new_pcd[:,1].min())/new_pcd.shape[0],(new_pcd[:,2].max()-new_pcd[:,2].min())/new_pcd.shape[0] ])
+    #print(r)
+    #center = trajectory[0]
+    trashold = r/2
+    distances = []
+    for i in range(0, new_pcd.shape[0]):
+        distances.append(np.linalg.norm(new_pcd[i] - center))
+    distances = np.array(distances)
+    print(distances.max())
+    print(r)
+    finish = (distances.max()-center)/r
+    print(finish)
+    #calc current weight step by step
+    cur_step = center
+    print(center)
+    weights = []
+    i = 0
+    go = True
+    while (go):
+        weights.append(i)
+        i+=1
+        cur_step+=r
+        if((cur_step[0,0]>=finish[0,0])and(cur_step[0,1]>=finish[0,1])and(cur_step[0,2]>=finish[0,2])):
+            go = False
+    print(weights)
+    #plt.figure()
+    #plt.hist(distances)
+    #plt.show()
 
     #min_max_scaler = preprocessing.MinMaxScaler()
     X = distances
@@ -732,11 +774,11 @@ def pairwise_icp(pcd1, pcd2, threshold, draw = False):
          [0., 1., 0., 0.],
          [0., 0., 1., 0.],
          [0.0, 0.0, 0.0, 1.0]])
-    pcd1_down = open3d.voxel_down_sample(pcd1, voxel_size=voxel_size)
-    pcd2_down = open3d.voxel_down_sample(pcd2, voxel_size=voxel_size)
+    #pcd1_down = open3d.voxel_down_sample(pcd1, voxel_size=voxel_size)
+    #pcd2_down = open3d.voxel_down_sample(pcd2, voxel_size=voxel_size)
     #pcds_down = [pcd1_down, pcd2_down]
-
-
+    pcd1_down = pcd1
+    pcd2_down = pcd2
     evaluation = open3d.evaluate_registration(pcd1_down, pcd2_down,
                                        threshold, trans_init)
     #print(evaluation)
@@ -850,20 +892,39 @@ prev = open3d.PointCloud()
 
 #open3d.draw_geometries([pcd1, pcd2])
 #print(pcd1)
-for i in range(0,20,2):
-    pairs, sizes, pcds = (get_joint_segments(i,i+1,algoritm="DBSCAN", plot = False))
+
+calc_weights(get_one_point_cloud_turned(dataset, 0, take_each_n_point, centroid, rotated_centroid), trajectory[0])
+pcds = get_one_clusters(get_one_pcd_filtered(0, filter_z=0.5), algoritm="Agl", number=0)
+for i in range(10,100):
+    pcds1 = copy.deepcopy(get_one_clusters(get_one_pcd_filtered(i+1, filter_z = 0.5), algoritm="Agl", number=i))
+    pairs, sizes, pcds = (get_joint_segments(pcds,pcds1, plot = False))
+    #vis = open3d.Visualizer()
+    #vis.create_window()
+    #pcd = open3d.PointCloud()
     #open3d.draw_geometries(pcds)
-    print(i)
+    #for i in range(0, len(pcds)):
+
+    #for i in range(0, len(pcds)):
+    #    vis.add_geometry(pcd)
+    #    pcd.points = copy.deepcopy(open3d.Vector3dVector(pcds[i].points))
+        #pcd.paint_uniform_color(pcds[i].paint_uniform_color)
+    #    vis.update_geometry()
+    #vis.poll_events()
+    #vis.update_renderer()
+    #time.sleep(0.2)
+    # for 1 render
     custom_draw_joint_geometry(pcds, saveF=True, number = i)
+    pcds = copy.deepcopy(pcds1)
     #pcd1 = open3d.PointCloud()
     pcd1 = get_one_pcd_filtered(i, filter_z=0.5)
-    pcd1.paint_uniform_color([0,0,0])
+    pcd1.paint_uniform_color([5,5,5])
     #pcd1 = open3d.PointCloud()
     pcd2 = get_one_pcd_filtered(i+1, filter_z=0.5)
-    pcd2.paint_uniform_color([1, 1, 1])
-    pcds.append(pcd1)
-    pcds.append(pcd2)
-    open3d.draw_geometries(pcds)
+    pcd2.paint_uniform_color([9, 9, 9])
+    #pcds.append(pcd1)
+    #pcds.append(pcd2)
+    #for one render with the scene "before"
+    #open3d.draw_geometries(pcds)
 
 #TODO - adopt for sequences, step by step. Improve weights, play with parameters, solve different number of segments, play with number of segments, improve visualisation
 #render_online_segments(0.5)
