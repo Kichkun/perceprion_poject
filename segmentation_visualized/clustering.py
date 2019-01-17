@@ -598,7 +598,7 @@ def custom_draw_geometry(j=0, saveF = True, filter_z = 0.5):
             time.sleep(0.2)
         vis.destroy_window()
 
-def custom_draw_joint_geometry(pcds, saveF = False, number = 0, j = 0):
+def custom_draw_joint_geometry(pcds, saveF = False, number = 0, show = True, j = 0):
     vis = open3d.Visualizer()
     vis.create_window()
 
@@ -621,11 +621,11 @@ def custom_draw_joint_geometry(pcds, saveF = False, number = 0, j = 0):
     # TODO: Save images to files
 
     if (saveF):
-        plt.imsave("/home/kish/PycharmProjects/try/TestData/segments_DB_new2/{:05d}.png".format(number), \
+        plt.imsave("/home/kish/PycharmProjects/try/TestData/new/{:05d}.png".format(number), \
                    np.asarray(image), dpi=1)
-
-    vis.run()
-    vis.destroy_window()
+    if(show):
+        vis.run()
+        vis.destroy_window()
 
 
 def pairwise_registration(source, target):
@@ -701,6 +701,36 @@ def get_joint_segments(pcds, pcds1, plot = False,  filter_z = 0.5):
         #render full image
         #save images of full pcd
     return pairs, np.array(segments), pcds_joint
+def get_joint_pairs(pcds, pcds1, plot = False,  filter_z = 0.5):
+    pairs = np.zeros((len(pcds), len(pcds1)))
+    pcds_joint = []
+    for i in range(0, len(pcds)):
+        for j in range(0, len(pcds1)):
+            pairs[i, j] = str(pairwise_icp(pcds[i], pcds1[j], filter_z, draw=False))
+            if (pairs[i,j]>0.5):
+                # join segments +down_sample+draw
+                #TODO: add downsample, add pcds output and full render
+                pcd_joint = [pcds[i], pcds1[j]]
+                pcd_combined = open3d.PointCloud()
+                for point_id in range(len(pcd_joint)):
+                    #pcds[point_id].transform(pose_graph.nodes[point_id].pose)
+                    pcd_combined += pcd_joint[point_id]
+
+                pcd_combined_down = open3d.voxel_down_sample(pcd_combined, voxel_size=0.0001)
+                # open3d.write_point_cloud("multiway_registration.pcd", pcd_combined_down)
+                #open3d.draw_geometries([pcd_combined_down])
+                #TODO: add posegraph combination
+                pcds_joint.append(pcd_combined_down)
+                if (plot):
+                    open3d.draw_geometries(pcd_combined_down)
+    for i in range(0, pairs.shape[0]):
+        if (pairs[i].min() == 0):
+            pcds_joint.append(pcds[i])
+    for i in range(0, pairs.shape[1]):
+        if (pairs[:,i].min() == 0):
+            pcds_joint.append(pcds1[i])
+    return pairs, pcds_joint
+
 def calc_weights(new_pcd, center):
     #new_pcd = get_one_point_cloud_turned(dataset,0,1,centroid, rotated_centroid)
     #r = np.array([(new_pcd[:,0].max()-new_pcd[:,0].min())/new_pcd.shape[0],(new_pcd[:,1].max()-new_pcd[:,1].min())/new_pcd.shape[0],(new_pcd[:,2].max()-new_pcd[:,2].min())/new_pcd.shape[0] ])
@@ -892,39 +922,58 @@ prev = open3d.PointCloud()
 
 #open3d.draw_geometries([pcd1, pcd2])
 #print(pcd1)
+def pairs_minimized(a,b,algoritm, show = False):
+    pcds = get_one_clusters(get_one_pcd_filtered(a, filter_z=0.5), algoritm=algoritm, number=a)
+    for i in range(a, b):
+        pcds1 = copy.deepcopy(get_one_clusters(get_one_pcd_filtered(i + 1, filter_z=0.5), algoritm=algoritm, number=i))
+        pairs, sizes, pcds = (get_joint_segments(pcds, pcds1, plot=False))
+        # vis = open3d.Visualizer()
+        # vis.create_window()
+        # pcd = open3d.PointCloud()
+        # open3d.draw_geometries(pcds)
+        # for i in range(0, len(pcds)):
 
-calc_weights(get_one_point_cloud_turned(dataset, 0, take_each_n_point, centroid, rotated_centroid), trajectory[0])
-pcds = get_one_clusters(get_one_pcd_filtered(0, filter_z=0.5), algoritm="Agl", number=0)
-for i in range(10,100):
-    pcds1 = copy.deepcopy(get_one_clusters(get_one_pcd_filtered(i+1, filter_z = 0.5), algoritm="Agl", number=i))
-    pairs, sizes, pcds = (get_joint_segments(pcds,pcds1, plot = False))
-    #vis = open3d.Visualizer()
-    #vis.create_window()
-    #pcd = open3d.PointCloud()
-    #open3d.draw_geometries(pcds)
-    #for i in range(0, len(pcds)):
+        # for i in range(0, len(pcds)):
+        #    vis.add_geometry(pcd)
+        #    pcd.points = copy.deepcopy(open3d.Vector3dVector(pcds[i].points))
+        # pcd.paint_uniform_color(pcds[i].paint_uniform_color)
+        #    vis.update_geometry()
+        # vis.poll_events()
+        # vis.update_renderer()
+        # time.sleep(0.2)
+        # for 1 render
+        custom_draw_joint_geometry(pcds, saveF=True, number=i, show = show)
+        pcds = copy.deepcopy(pcds1)
+        # pcd1 = open3d.PointCloud()
+        pcd1 = get_one_pcd_filtered(i, filter_z=0.5)
+        pcd1.paint_uniform_color([5, 5, 5])
+        # pcd1 = open3d.PointCloud()
+        pcd2 = get_one_pcd_filtered(i + 1, filter_z=0.5)
+        pcd2.paint_uniform_color([9, 9, 9])
+        # pcds.append(pcd1)
+        # pcds.append(pcd2)
+        # for one render with the scene "before"
+        # open3d.draw_geometries(pcds)
 
-    #for i in range(0, len(pcds)):
-    #    vis.add_geometry(pcd)
-    #    pcd.points = copy.deepcopy(open3d.Vector3dVector(pcds[i].points))
-        #pcd.paint_uniform_color(pcds[i].paint_uniform_color)
-    #    vis.update_geometry()
-    #vis.poll_events()
-    #vis.update_renderer()
-    #time.sleep(0.2)
-    # for 1 render
-    custom_draw_joint_geometry(pcds, saveF=True, number = i)
-    pcds = copy.deepcopy(pcds1)
-    #pcd1 = open3d.PointCloud()
-    pcd1 = get_one_pcd_filtered(i, filter_z=0.5)
-    pcd1.paint_uniform_color([5,5,5])
-    #pcd1 = open3d.PointCloud()
-    pcd2 = get_one_pcd_filtered(i+1, filter_z=0.5)
-    pcd2.paint_uniform_color([9, 9, 9])
-    #pcds.append(pcd1)
-    #pcds.append(pcd2)
-    #for one render with the scene "before"
-    #open3d.draw_geometries(pcds)
+
+def pairs_maximized(a,b, algoritm, show = False):
+    pcds = get_one_clusters(get_one_pcd_filtered(a, filter_z=0.5), algoritm=algoritm, number=a)
+    pcds1 = copy.deepcopy(get_one_clusters(get_one_pcd_filtered(a + 1, filter_z=0.5), algoritm=algoritm, number=a+1))
+    _, _, pcds_out_prev = (get_joint_segments(pcds, pcds1, plot=False))
+    custom_draw_joint_geometry(pcds_out_prev, saveF=True, number=a, show=show)
+    for i in range(a+2,b,2):
+
+        pcds = get_one_clusters(get_one_pcd_filtered(i, filter_z=0.5), algoritm=algoritm, number=i)
+        pcds1 = copy.deepcopy(get_one_clusters(get_one_pcd_filtered(i + 1, filter_z=0.5), algoritm=algoritm, number=i+1))
+        _,_, pcds_out = (get_joint_segments(pcds, pcds1, plot=False))
+        #custom_draw_joint_geometry(pcds_out, saveF=True, number=i)
+        _,pcds_out_prev = get_joint_pairs(pcds_out,pcds_out_prev)
+        #print(pcds_out_prev)
+        custom_draw_joint_geometry(pcds_out_prev, saveF=True, number=i+1, show= show)
+
+pairs_maximized(0,20, algoritm="DBSCAN", show=False)
+#pairs_minimized(0,5, "DBSCAN", show = False)
+#calc_weights(get_one_point_cloud_turned(dataset, 0, take_each_n_point, centroid, rotated_centroid), trajectory[0])
 
 #TODO - adopt for sequences, step by step. Improve weights, play with parameters, solve different number of segments, play with number of segments, improve visualisation
 #render_online_segments(0.5)
