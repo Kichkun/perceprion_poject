@@ -6,7 +6,7 @@ from os.path import isfile, join
 import imageio
 import matplotlib
 from sklearn.cluster import AgglomerativeClustering
-from progress.bar import FillingCirclesBar
+#from progress.bar import FillingCirclesBar
 #import whitebox
 
 matplotlib.use('TkAgg')
@@ -485,7 +485,7 @@ def get_one_clusters(pcd, plot = False):
 np.set_printoptions(precision=4, suppress=True)
 
 # Folder with data set
-basedir = '/media/kish/CHANGE/dataset'
+basedir = 'dataset'
 # Sequence to use
 sequence = '00'
 # Amount of frames to download.
@@ -507,34 +507,46 @@ trajectory = get_trajectory(dataset)
 
 trajectory, centroid, rotated_centroid, M = find_best_fitting_plane(trajectory, ax2)
 
-pc_s, shape_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
-print(shape_s)
-ax2.scatter(trajectory[:, 0],
-            trajectory[:, 1],
-            trajectory[:, 2],
-            c='red')
 
-pc_s -= centroid
-
-pc_s = pc_s[:, :] * M
-
-pc_s += rotated_centroid
-
-pcs_step_cl = 20
-clusters_per_pair = 4
-voxel_size = 0.02
-max_correspondence_distance_coarse = voxel_size * 15
-max_correspondence_distance_fine = voxel_size * 1.5
-pcd = open3d.PointCloud()
-prev = open3d.PointCloud()
+def params_to_return():
+    Tr = dataset.calib.T_cam0_velo[:3, :]
+    return centroid, rotated_centroid, Tr
 
 
+if (__name__ ==" __main__"):
+    pc_s, shape_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)
+    print(shape_s)
+    ax2.scatter(trajectory[:, 0],
+                trajectory[:, 1],
+                trajectory[:, 2],
+                c='red')
 
-#render_online()
-#calc_prev_pcd(prev, pcd)
-#open3d.draw_geometries([get_one_pcd_filtered(0,0)])
-#render_online_filtered(filter_z=0)
-#pcds = get_one_clusters(get_one_pcd_filtered(0,0.5), plot=True)
-pcds = get_one_clusters(get_one_pcd_filtered(0,0.5))
+    pc_s -= centroid
 
-open3d.draw_geometries(pcds)
+    pc_s = pc_s[:, :] * M
+
+    pc_s += rotated_centroid
+
+    pcs_step_cl = 20
+    clusters_per_pair = 4
+    voxel_size = 0.02
+    max_correspondence_distance_coarse = voxel_size * 15
+    max_correspondence_distance_fine = voxel_size * 1.5
+    pcd = open3d.PointCloud()
+    prev = open3d.PointCloud()
+    for i in range (1,9):
+        out = get_one_point_cloud_turned(dataset, 0,i,centroid, rotated_centroid)
+        points = np.array(out[:, :3])
+        pcd = open3d.PointCloud()
+        pcd.points = open3d.Vector3dVector(points)
+        open3d.write_point_cloud(str(i)+"_new.pcd", pcd)
+
+
+    #render_online()
+    #calc_prev_pcd(prev, pcd)
+    #open3d.draw_geometries([get_one_pcd_filtered(0,0)])
+    #render_online_filtered(filter_z=0)
+    #pcds = get_one_clusters(get_one_pcd_filtered(0,0.5), plot=True)
+    pcds = get_one_clusters(get_one_pcd_filtered(0,0.5))
+
+    open3d.draw_geometries(pcds)
