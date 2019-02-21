@@ -510,8 +510,7 @@ trajectory, centroid, rotated_centroid, M = find_best_fitting_plane(trajectory, 
 
 def params_to_return():
     Tr = dataset.calib.T_cam0_velo[:3, :]
-    return centroid, rotated_centroid, Tr
-
+    return centroid, rotated_centroid, Tr, dataset.poses, M
 
 if (__name__ ==" __main__"):
     pc_s, shape_s = get_point_cloud(dataset, pcs_step, take_each_n_point, ax2)

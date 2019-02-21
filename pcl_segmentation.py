@@ -36,7 +36,7 @@ def test_region_growing(path):
     a = np.array(a)
     #trashold =1
     minsc = a.mean()-10 #BEST FOR NOT TURNED
-    maxsc = a.mean()-0.5#BEST FOR NOT TURNED
+    maxsc = a.mean()#BEST FOR NOT TURNED
     #minsc = a.mean() -10  # BEST FOR TURNED
     #maxsc = a.mean()  # BEST FOR  TURNED
 
@@ -83,6 +83,6 @@ def test_region_growing(path):
         viewer.spinOnce(10)
     #assert max([len(c.indices) for c in clusters]) == 2449  # ground
 for i in range(0,9):
-    test_region_growing("dataset/pcds_00/00009"+str(i)+".pcd")
+    test_region_growing("dataset/pcds_00/00000"+str(i)+".pcd")
     #test_region_growing("dataset/turned_pcds/" + str(i) + "_new.pcd")
     #повернутые облака(в реальных координатах поместить сюда! совместить облака в сотню, протестить с фильтром земли и без
